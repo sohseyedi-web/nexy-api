@@ -1,25 +1,33 @@
 const { Box } = require("../models/Box");
 const { Task } = require("../models/Task");
-const { User } = require("../models/User");
 
 const createTask = async (req, res) => {
-  const { boxId, title, description, dueDate,userId } = req.body;
+  const { boxId, title, description, dueDate } = req.body;
+  const owner = req.user;
 
   try {
+    if (!owner || !owner._id) {
+      return res.status(401).json({ message: "User not authenticated" });
+    }
+
     const box = await Box.findById(boxId);
     if (!box) return res.status(404).json({ message: "Box not found" });
 
-    if (box.owner.toString() !== userId) {
+    if (box.owner.toString() !== owner._id.toString()) {
       return res
         .status(403)
         .json({ message: "Only box owner can create tasks" });
     }
 
-    const task = new Task.create({
+    if (dueDate && isNaN(new Date(dueDate))) {
+      return res.status(400).json({ message: "Invalid due date format" });
+    }
+
+    const task = new Task({
       box: box._id,
       title,
       description,
-      dueDate,
+      dueDate: dueDate ? new Date(dueDate) : undefined,
     });
 
     await task.save();
@@ -33,12 +41,21 @@ const createTask = async (req, res) => {
 
 const getTask = async (req, res) => {
   const { boxId } = req.query;
+  const owner = req.user;
 
   try {
+    const box = await Box.findById(boxId);
+    if (!box) return res.status(404).json({ message: "Box not found" });
+
+    if (!box.members.includes(owner._id)) {
+      return res.status(403).json({ message: "Access denied to this box" });
+    }
+
     const tasks = await Task.find({ box: boxId }).populate(
       "completedBy",
       "name email"
     );
+
     res.status(200).json(tasks);
   } catch (err) {
     res
@@ -48,17 +65,23 @@ const getTask = async (req, res) => {
 };
 
 const completeTask = async (req, res) => {
-  const { userEmail } = req.body;
+  const user = req.user;
 
   try {
-    const user = await User.findOne({ email: userEmail });
-    if (!user) return res.status(404).json({ message: "User not found" });
-
     const task = await Task.findById(req.params.id);
     if (!task) return res.status(404).json({ message: "Task not found" });
 
-    task.isCompleted = true;
-    task.completedBy = user._id;
+    const box = await Box.findById(task.box);
+    if (!box) return res.status(404).json({ message: "Box not found" });
+
+    if (!box.members.includes(user._id)) {
+      return res
+        .status(403)
+        .json({ message: "Only box members can complete tasks" });
+    }
+
+    task.completed = true;
+    task.completedBy = requester._id;
     await task.save();
 
     res.status(200).json({ message: "Task completed", task });
@@ -70,10 +93,22 @@ const completeTask = async (req, res) => {
 };
 
 const deleteTask = async (req, res) => {
-  try {
-    const deleted = await Task.findByIdAndDelete(req.params.id);
-    if (!deleted) return res.status(404).json({ message: "Task not found" });
+  const owner = req.user;
 
+  try {
+    const task = await Task.findById(req.params.id);
+    if (!task) return res.status(404).json({ message: "Task not found" });
+
+    const box = await Box.findById(task.box);
+    if (!box) return res.status(404).json({ message: "Box not found" });
+
+    if (box.owner.toString() !== owner._id.toString()) {
+      return res
+        .status(403)
+        .json({ message: "Only box owner can delete tasks" });
+    }
+
+    await task.deleteOne();
     res.status(200).json({ message: "Task deleted" });
   } catch (err) {
     res
