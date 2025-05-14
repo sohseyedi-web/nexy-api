@@ -3,12 +3,10 @@ const { Task } = require("../models/Task");
 const { User } = require("../models/User");
 
 async function createBox(req, res) {
-  const { name, ownerEmail } = req.body;
+  const { name } = req.body;
+  const owner = req.user;
 
   try {
-    const owner = await User.findOne({ email: ownerEmail });
-    if (!owner) return res.status(404).json({ message: "Owner not found" });
-
     const box = new Box({
       name,
       owner: owner._id,
@@ -27,6 +25,7 @@ async function createBox(req, res) {
 async function inviteBox(req, res) {
   const { email } = req.body;
   const boxId = req.params.id;
+  const owner = req.user;
 
   try {
     const user = await User.findOne({ email });
@@ -34,6 +33,9 @@ async function inviteBox(req, res) {
 
     const box = await Box.findById(boxId);
     if (!box) return res.status(404).json({ message: "Box not found" });
+
+    if (box.owner.toString() !== owner._id.toString())
+      return res.status(403).json({ message: "Only owner can invite members" });
 
     if (!box.members.includes(user._id)) {
       box.members.push(user._id);
@@ -47,13 +49,10 @@ async function inviteBox(req, res) {
 }
 
 async function getBoxes(req, res) {
-  const { email } = req.query;
+  const owner = req.user;
 
   try {
-    const user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    const boxes = await Box.find({ members: user._id })
+    const boxes = await Box.find({ members: owner._id })
       .populate("owner", "name email")
       .populate("members", "name email");
 
@@ -66,11 +65,17 @@ async function getBoxes(req, res) {
 }
 
 async function deleteBoxes(req, res) {
+  const boxId = req.params.id;
+  const owner = req.user;
+
   try {
-    const boxId = req.params.id;
+    const box = await Box.findById(boxId);
+    if (!box) return res.status(404).json({ message: "Box not found" });
+
+    if (box.owner.toString() !== owner._id.toString())
+      return res.status(403).json({ message: "Only owner can delete box" });
 
     await Task.deleteMany({ box: boxId });
-
     await Box.findByIdAndDelete(boxId);
 
     res.status(200).json({ message: "Box and related tasks deleted" });
@@ -99,12 +104,12 @@ async function getMembersBoxes(req, res) {
 async function deleteMemberBoxes(req, res) {
   try {
     const { id, userId } = req.params;
-    const requesterId = req.body.requesterId;
+    const owner = req.user;
 
     const box = await Box.findById(id);
     if (!box) return res.status(404).json({ message: "Box not found" });
 
-    if (box.owner.toString() !== requesterId)
+    if (box.owner.toString() !== owner._id.toString())
       return res.status(403).json({ message: "Only owner can remove members" });
 
     box.members = box.members.filter(
