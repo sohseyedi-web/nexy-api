@@ -20,7 +20,7 @@ const login = async (req, res, next) => {
     }
 
     await user.save();
-    const token = generateToken({ userId: user._id });
+    const token = generateToken({ _id: user._id });
 
     res.cookie("token", token, {
       httpOnly: true,
