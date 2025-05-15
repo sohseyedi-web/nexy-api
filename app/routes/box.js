@@ -13,10 +13,10 @@ const router = express.Router();
 
 router.get("/", authMiddleware, getBoxes);
 router.post("/create", authMiddleware, createBox);
+router.post("/invite/:id", authMiddleware, inviteBox);
+router.get("/members/:id", authMiddleware, getMembersBoxes);
+router.delete("/members/:id", authMiddleware, deleteMemberBoxes);
 router.delete("/:id", authMiddleware, deleteBoxes);
-router.post("/:id/invite", authMiddleware, inviteBox);
-router.get("/:id/members", authMiddleware, getMembersBoxes);
-router.delete("/:id/members/:userId", authMiddleware, deleteMemberBoxes);
 
 module.exports = {
   BoxRoutes: router,
