@@ -103,7 +103,8 @@ async function getMembersBoxes(req, res) {
 
 async function deleteMemberBoxes(req, res) {
   try {
-    const { id, userId } = req.params;
+    const { id } = req.params;
+    const { userId } = req.body;
     const owner = req.user;
 
     const box = await Box.findById(id);
