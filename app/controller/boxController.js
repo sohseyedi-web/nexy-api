@@ -14,11 +14,14 @@ async function createBox(req, res) {
     });
 
     await box.save();
+    await box.populate("owner", "name email");
+
     res.status(201).json(box);
   } catch (err) {
-    res
-      .status(500)
-      .json({ message: "Box creation failed", error: err.message });
+    res.status(500).json({
+      message: "Box creation failed",
+      error: err.message,
+    });
   }
 }
 
@@ -34,10 +37,15 @@ async function inviteBox(req, res) {
     const box = await Box.findById(boxId);
     if (!box) return res.status(404).json({ message: "Box not found" });
 
-    if (box.owner.toString() !== owner._id.toString())
+    if (box.owner.toString() !== owner._id.toString()) {
       return res.status(403).json({ message: "Only owner can invite members" });
+    }
 
-    if (!box.members.includes(user._id)) {
+    const isAlreadyMember = box.members.some(
+      (memberId) => memberId.toString() === user._id.toString()
+    );
+
+    if (!isAlreadyMember) {
       box.members.push(user._id);
       await box.save();
     }
@@ -49,10 +57,10 @@ async function inviteBox(req, res) {
 }
 
 async function getBoxes(req, res) {
-  const owner = req.user;
+  const user = req.user;
 
   try {
-    const boxes = await Box.find({ members: owner._id })
+    const boxes = await Box.find({ members: user._id })
       .populate("owner", "name email")
       .populate("members", "name email");
 
@@ -72,8 +80,9 @@ async function deleteBoxes(req, res) {
     const box = await Box.findById(boxId);
     if (!box) return res.status(404).json({ message: "Box not found" });
 
-    if (box.owner.toString() !== owner._id.toString())
+    if (box.owner.toString() !== owner._id.toString()) {
       return res.status(403).json({ message: "Only owner can delete box" });
+    }
 
     await Task.deleteMany({ box: boxId });
     await Box.findByIdAndDelete(boxId);
@@ -97,7 +106,9 @@ async function getMembersBoxes(req, res) {
 
     return res.json({ members: box.members });
   } catch (error) {
-    return res.status(500).json({ message: "Server error" });
+    return res
+      .status(500)
+      .json({ message: "Server error", error: error.message });
   }
 }
 
@@ -110,8 +121,13 @@ async function deleteMemberBoxes(req, res) {
     const box = await Box.findById(id);
     if (!box) return res.status(404).json({ message: "Box not found" });
 
-    if (box.owner.toString() !== owner._id.toString())
+    if (box.owner.toString() !== owner._id.toString()) {
       return res.status(403).json({ message: "Only owner can remove members" });
+    }
+
+    if (userId === owner._id.toString()) {
+      return res.status(400).json({ message: "Owner cannot be removed" });
+    }
 
     box.members = box.members.filter(
       (memberId) => memberId.toString() !== userId
@@ -120,7 +136,9 @@ async function deleteMemberBoxes(req, res) {
 
     return res.json({ message: "Member removed" });
   } catch (error) {
-    return res.status(500).json({ message: "Server error" });
+    return res
+      .status(500)
+      .json({ message: "Server error", error: error.message });
   }
 }
 
